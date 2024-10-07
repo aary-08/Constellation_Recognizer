@@ -1,0 +1,103 @@
+import tkinter as tk
+from tkinter import messagebox, filedialog
+import os
+import sys
+import cv2
+from PIL import Image, ImageTk
+import json
+
+# Ensure the main_script is importable
+sys.path.append(os.path.abspath('./'))  # Adjust path if necessary
+from ct import test_runner
+
+# Directory where test images are stored
+test_data_directory = "test_data"
+
+# Load descriptions from JSON file
+with open('descriptions.json', 'r') as f:
+    descriptions = json.load(f)
+
+def run_tests():
+    selected_files = filedialog.askopenfilenames(
+        initialdir=test_data_directory,
+        title="Select Test Images",
+        filetypes=(("Image Files", "*.jpg;*.jpeg;*.png"), ("All Files", "*.*"))
+    )
+    
+    if not selected_files:
+        messagebox.showerror("Error", "No files selected.")
+        return
+
+    selected_names = [os.path.basename(file).split('.')[0] for file in selected_files]
+
+    # Update the 'd' list with selected items
+    global d
+    d = selected_names
+
+    total_tests = len(d)
+    correct_predictions = 0
+
+    results = {}
+    descriptions_text = {}  # To hold descriptions for matching constellations
+
+    for name in d:
+        pred = test_runner(name)
+        result = "Matching" if pred == name else "Not Matching"
+        results[name] = f"{pred} ({result})"
+
+        if pred == name:
+            correct_predictions += 1
+            # Add description if available
+            description = descriptions.get(pred, "No description available.")
+            descriptions_text[name] = description
+
+    accuracy_percentage = (correct_predictions / total_tests) * 100
+    result_text = "\n".join([f"{name}: {result}" + (f"\nDescription: {descriptions_text[name]}" if name in descriptions_text else "") for name, result in results.items()])
+    result_text += f"\n\nAccuracy: {accuracy_percentage:.2f}%"
+    
+    messagebox.showinfo("Results", result_text)
+
+def update_frame():
+    global cap, tk_image
+    ret, frame = cap.read()
+    if ret:
+        # Convert the frame to RGB
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Convert the frame to an Image object
+        img = Image.fromarray(frame)
+        # Convert Image object to PhotoImage
+        tk_image = ImageTk.PhotoImage(img)
+        # Update the label with the new image
+        video_label.config(image=tk_image)
+    root.after(30, update_frame)  # Update every 30 ms
+
+# Create the main window
+root = tk.Tk()
+root.title("Constellation Recognizer")
+root.geometry("800x600")
+
+# Canvas for video background
+canvas = tk.Canvas(root, width=800, height=600)
+canvas.pack(fill="both", expand=True)
+
+# Video label for displaying frames
+video_label = tk.Label(canvas)
+video_label.place(relwidth=1, relheight=1)
+
+# Load and play video
+cap = cv2.VideoCapture("43027-434334088.mp4")
+update_frame()
+
+# Title label
+title_label = tk.Label(root, text="Constellation Recognizer", font=("Helvetica", 24), fg="white", bg="black")
+title_label.place(relx=0.5, rely=0.1, anchor="center")
+
+# Frame for the button
+frame = tk.Frame(root, bg="white", padx=50, pady=50)  # Increase padding for larger frame
+frame.place(relx=0.2, rely=0.5, anchor="center")  # Shift frame to the left
+
+# Button to open file dialog and start processing
+btn_run = tk.Button(frame, text="Select and Run Tests", command=run_tests)
+btn_run.pack(pady=10)
+
+root.mainloop()
